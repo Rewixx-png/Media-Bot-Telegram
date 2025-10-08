@@ -3,7 +3,7 @@
 import os
 import tempfile
 import logging
-import shutil  # <--- ДОБАВЛЕН ИМПОРТ
+import shutil
 
 from aiogram import Router, F, types, Bot
 from aiogram.fsm.context import FSMContext
@@ -34,8 +34,8 @@ def _get_next_in_cycle(current_value, options_list):
 @router.callback_query(F.data == "convert_audio_menu")
 async def ask_for_audio_format(callback: types.CallbackQuery, state: FSMContext):
     await state.clear()
-    await callback.message.edit_text(
-        "Выберите формат для конвертации аудиофайла:",
+    await callback.message.edit_caption(
+        caption="Выберите формат для конвертации аудиофайла:",
         reply_markup=get_audio_formats_menu()
     )
     await callback.answer()
@@ -48,7 +48,7 @@ async def ask_for_ogg_file(callback: types.CallbackQuery, state: FSMContext):
         instruction_message_id=callback.message.message_id
     )
     await state.set_state(ConversionStates.waiting_for_audio_for_conversion)
-    await callback.message.edit_text("Хорошо, конвертируем в .ogg.\nТеперь отправьте мне аудиофайл.")
+    await callback.message.edit_caption(caption="Хорошо, конвертируем в .ogg.\nТеперь отправьте мне аудиофайл.")
     await callback.answer()
 
 
@@ -60,8 +60,8 @@ async def start_wav_config(callback: types.CallbackQuery, state: FSMContext):
         'channels': 2
     }
     await state.update_data(wav_config=default_config)
-    await callback.message.edit_text(
-        "Настройте параметры для WAV-файла:",
+    await callback.message.edit_caption(
+        caption="Настройте параметры для WAV-файла:",
         reply_markup=get_wav_config_menu(default_config)
     )
     await callback.answer()
@@ -72,7 +72,7 @@ async def process_wav_config(callback: types.CallbackQuery, state: FSMContext):
     if callback.data == "wav_config_done":
         await state.update_data(target_format='wav', instruction_message_id=callback.message.message_id)
         await state.set_state(ConversionStates.waiting_for_audio_for_conversion)
-        await callback.message.edit_text("Отлично! Настройки сохранены.\nТеперь отправьте мне аудиофайл для конвертации.")
+        await callback.message.edit_caption(caption="Отлично! Настройки сохранены.\nТеперь отправьте мне аудиофайл для конвертации.")
         await callback.answer()
         return
 
@@ -81,7 +81,8 @@ async def process_wav_config(callback: types.CallbackQuery, state: FSMContext):
     if config is None:
         await callback.answer("Произошла ошибка состояния. Пожалуйста, начните заново.", show_alert=True)
         await state.clear()
-        await callback.message.edit_text("Пожалуйста, начните заново.", reply_markup=get_main_menu())
+        await callback.message.delete()
+        await callback.message.answer("Пожалуйста, начните заново.", reply_markup=get_main_menu())
         return
 
     action = callback.data.replace("wav_config_", "")
@@ -94,7 +95,7 @@ async def process_wav_config(callback: types.CallbackQuery, state: FSMContext):
 
     await state.update_data(wav_config=config)
     try:
-        await callback.message.edit_text("Настройте параметры для WAV-файла:", reply_markup=get_wav_config_menu(config))
+        await callback.message.edit_caption(caption="Настройте параметры для WAV-файла:", reply_markup=get_wav_config_menu(config))
     except TelegramBadRequest:
         pass
     await callback.answer()
@@ -109,16 +110,15 @@ async def handle_audio_for_conversion(message: Message, state: FSMContext, bot: 
     await state.clear()
 
     processing_message = await message.reply("Конвертирую аудио... 🎶")
-    
+
     try:
         file_info = await bot.get_file(message.audio.file_id)
         with tempfile.TemporaryDirectory() as temp_dir:
-            input_path = os.path.join(temp_dir, message.audio.file_name)
+            input_path = os.path.join(temp_dir, "input_audio")
             output_path = os.path.join(temp_dir, f"output.{target_format}")
-            
-            # --- ИСПРАВЛЕНИЕ: Копируем файл локально вместо скачивания ---
+
             shutil.copy(file_info.file_path, input_path)
-            
+
             success = await convert_audio(input_path, output_path, target_format, config=wav_config)
 
             if success:
