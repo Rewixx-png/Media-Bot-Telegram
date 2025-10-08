@@ -1,110 +1,102 @@
 #!/bin/bash
 
-# Выходим из скрипта, если любая команда завершится с ошибкой
-set -e
+# --- Цвета для вывода ---
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
 
-echo "🚀 Начинаем установку Media Bot и локального Telegram API сервера..."
+echo -e "${GREEN}--- Автоматический установщик Media Bot ---${NC}"
 
-# --- 1. Сбор информации от пользователя ---
-echo "⚙️ Пожалуйста, введите ваши данные от Telegram."
-read -p "Введите ваш API ID: " API_ID
-read -p "Введите ваш API HASH: " API_HASH
-read -p "Введите ваш BOT TOKEN: " BOT_TOKEN
-
-API_PORT=8088
-PROJECT_PATH=$(pwd)
-
-# --- 2. Установка системных зависимостей ---
-echo "📦 Обновляем пакеты и устанавливаем зависимости..."
+# --- Обновление пакетов и установка базовых зависимостей ---
+echo -e "\n${YELLOW}>>> Шаг 1: Обновление системы и установка зависимостей...${NC}"
 sudo apt-get update
-sudo apt-get install -y g++ cmake make zlib1g-dev libssl-dev git python3-pip python3-venv ffmpeg
+sudo apt-get install -y git build-essential g++ cmake libssl-dev zlib1g-dev \
+                        python3-pip python3-venv ffmpeg nodejs npm
 
-# --- 3. Сборка Telegram API Server ---
-echo "🏗️ Скачиваем и собираем Telegram API сервер из исходников..."
-if [ -d "telegram-bot-api" ]; then
-    echo "Директория telegram-bot-api уже существует, пропускаем скачивание."
+# --- Сборка и установка локального API-сервера Telegram ---
+echo -e "\n${YELLOW}>>> Шаг 2: Настройка локального API-сервера Telegram...${NC}"
+if [ -d "td" ]; then
+    echo "Директория 'td' уже существует. Пропускаем клонирование."
 else
-    git clone https://github.com/tdlib/telegram-bot-api.git
+    git clone https://github.com/tdlib/td.git
 fi
-cd telegram-bot-api
-git submodule update --init --recursive
-mkdir -p build
+cd td
+git checkout v1.8.0
+rm -rf build
+mkdir build
 cd build
 cmake -DCMAKE_BUILD_TYPE=Release ..
-cmake --build . --target install
-cd $PROJECT_PATH # Возвращаемся в корневую папку проекта
+cmake --build . --target telegram-bot-api -- -j $(nproc)
+cd ../..
 
-echo "✅ Telegram API сервер успешно собран."
+# --- Запрос данных у пользователя ---
+echo -e "\n${YELLOW}>>> Шаг 3: Введите ваши данные от Telegram...${NC}"
+read -p "Введите ваш API_ID: " API_ID
+read -p "Введите ваш API_HASH: " API_HASH
+read -p "Введите ваш BOT_TOKEN: " BOT_TOKEN
 
-# --- 4. Создание systemd сервиса для API сервера ---
-echo "🔧 Создаем systemd сервис для API сервера (telegram-api.service)..."
-
-cat << EOF > /etc/systemd/system/telegram-api.service
+# --- Создание systemd-сервиса для API-сервера ---
+echo -e "\n${YELLOW}>>> Шаг 4: Создание systemd-сервиса для API-сервера...${NC}"
+SERVICE_FILE="/etc/systemd/system/telegram-api.service"
+cat << EOF | sudo tee $SERVICE_FILE
 [Unit]
 Description=Telegram Bot API Server
 After=network.target
 
 [Service]
-Type=simple
-User=root
-ExecStart=/usr/local/bin/telegram-bot-api --api-id=${API_ID} --api-hash=${API_HASH} --local --http-port=${API_PORT}
-Restart=on-failure
+User=$(whoami)
+WorkingDirectory=$(pwd)/td/build
+ExecStart=$(pwd)/td/build/telegram-bot-api --api-id=$API_ID --api-hash=$API_HASH --local --http-port=8088
+Restart=always
 RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-echo "🔄 Перезагружаем демоны systemd и запускаем сервис API..."
 sudo systemctl daemon-reload
 sudo systemctl enable telegram-api.service
-sudo systemctl start telegram-api.service
+sudo systemctl restart telegram-api.service
+echo -e "${GREEN}Сервис 'telegram-api' создан и запущен.${NC}"
 
-echo "✅ Сервис API запущен и добавлен в автозагрузку."
-
-# --- 5. Настройка окружения для бота ---
-echo "🐍 Настраиваем Python окружение для бота..."
-if [ -d "venv" ]; then
-    echo "Виртуальное окружение venv уже существует."
-else
+# --- Настройка Python-окружения ---
+echo -e "\n${YELLOW}>>> Шаг 5: Настройка Python-окружения...${NC}"
+# Создаем venv, если его нет
+if [ ! -d "venv" ]; then
     python3 -m venv venv
 fi
-
 source venv/bin/activate
 pip install -r requirements.txt
+deactivate
 
-# Записываем токен в config.py
-echo "BOT_TOKEN = \"${BOT_TOKEN}\"" > config.py
+# --- Замена токена в config.py ---
+CONFIG_FILE="config.py"
+echo "BOT_TOKEN = \"$BOT_TOKEN\"" > $CONFIG_FILE
 
-echo "✅ Окружение бота настроено."
+# --- Настройка и запуск бота через PM2 ---
+echo -e "\n${YELLOW}>>> Шаг 6: Настройка и запуск бота через PM2...${NC}"
 
-# --- 6. Создание systemd сервиса для бота ---
-echo "🔧 Создаем systemd сервис для бота (media-bot.service)..."
+# Проверка и установка PM2, если он не установлен
+if ! command -v pm2 &> /dev/null; then
+    echo "PM2 не найден. Устанавливаем PM2 глобально..."
+    sudo npm install pm2 -g
+fi
 
-cat << EOF > /etc/systemd/system/media-bot.service
-[Unit]
-Description=Media Bot for Telegram
-After=telegram-api.service
+# Запуск бота с помощью PM2
+echo "Запускаем бота 'media-bot'..."
+# Используем полный путь к интерпретатору из venv
+PYTHON_INTERPRETER="$(pwd)/venv/bin/python3"
+pm2 start main.py --name media-bot --interpreter $PYTHON_INTERPRETER
 
-[Service]
-Type=simple
-User=root
-WorkingDirectory=${PROJECT_PATH}
-ExecStart=${PROJECT_PATH}/venv/bin/python3 ${PROJECT_PATH}/main.py
-Restart=on-failure
-RestartSec=5
+# Сохранение списка процессов и настройка автозапуска
+pm2 save
+# Настройка автозапуска PM2 при перезагрузке системы
+# Команда `pm2 startup` выводит команду, которую нужно выполнить с sudo.
+# Мы автоматизируем этот процесс.
+env_path=$(which pm2)
+sudo env PATH=$PATH:/usr/bin $env_path startup systemd -u $(whoami) --hp $(echo $HOME)
 
-[Install]
-WantedBy=multi-user.target
-EOF
-
-echo "🔄 Перезагружаем демоны systemd и запускаем сервис бота..."
-sudo systemctl daemon-reload
-sudo systemctl enable media-bot.service
-sudo systemctl start media-bot.service
-
-# --- Завершение ---
-echo "🎉 УСТАНОВКА ЗАВЕРШЕНА! 🎉"
-echo "Бот и API сервер запущены как сервисы."
-echo "Проверить статус API: sudo systemctl status telegram-api"
-echo "Проверить статус бота: sudo systemctl status media-bot"
+echo -e "\n${GREEN}--- УСТАНОВКА ЗАВЕРШЕНА! ---${NC}"
+echo -e "✅ Локальный API-сервер Telegram запущен как сервис ${YELLOW}telegram-api${NC}."
+echo -e "✅ Бот запущен через PM2 под именем ${YELLOW}media-bot${NC}."
+echo -e "Используйте '${YELLOW}pm2 logs media-bot${NC}' для просмотра логов бота."
