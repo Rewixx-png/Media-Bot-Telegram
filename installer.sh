@@ -10,8 +10,10 @@ echo -e "${GREEN}--- Автоматический установщик Media Bot
 # --- Обновление пакетов и установка базовых зависимостей ---
 echo -e "\n${YELLOW}>>> Шаг 1: Обновление системы и установка зависимостей...${NC}"
 sudo apt-get update
+# ИСПРАВЛЕНО: Добавлен 'cmake' и убран 'npm', чтобы избежать конфликта пакетов.
+# 'npm' будет установлен вместе с 'nodejs'.
 sudo apt-get install -y git build-essential g++ cmake libssl-dev zlib1g-dev \
-                        python3-pip python3-venv ffmpeg nodejs npm
+                        python3-pip python3-venv ffmpeg nodejs
 
 # --- Сборка и установка локального API-сервера Telegram ---
 echo -e "\n${YELLOW}>>> Шаг 2: Настройка локального API-сервера Telegram...${NC}"
@@ -86,6 +88,8 @@ fi
 echo "Запускаем бота 'media-bot'..."
 # Используем полный путь к интерпретатору из venv
 PYTHON_INTERPRETER="$(pwd)/venv/bin/python3"
+# Удаляем старый процесс, если он существует, для чистого старта
+pm2 delete media-bot &> /dev/null
 pm2 start main.py --name media-bot --interpreter $PYTHON_INTERPRETER
 
 # Сохранение списка процессов и настройка автозапуска
