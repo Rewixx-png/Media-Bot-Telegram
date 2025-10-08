@@ -18,11 +18,12 @@ async def main():
         logging.critical("Токен не найден или не изменен в файле config.py!")
         raise ValueError("Токен не найден или не изменен в файле config.py. Укажите его.")
 
-    # --- ИЗМЕНЯЕМ ПОРТ ЗДЕСЬ ---
-    local_server = TelegramAPIServer.from_base('http://127.0.0.1:8088')
-    session = AiohttpSession(api=local_server)
+    # --- ИЗМЕНЕНИЕ: Подключаемся к вашему удаленному API-серверу ---
+    # Указываем протокол https:// для безопасности
+    custom_server = TelegramAPIServer.from_base('https://api.rewixx.ru')
+    session = AiohttpSession(api=custom_server)
     bot = Bot(token=BOT_TOKEN, session=session)
-    # ---------------------------
+    # ----------------------------------------------------------------
 
     storage = MemoryStorage()
     dp = Dispatcher(storage=storage)
