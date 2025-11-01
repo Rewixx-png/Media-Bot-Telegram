@@ -1,0 +1,16 @@
+# docker-compose.yml
+
+# Указываем версию Docker Compose
+version: '3.8'
+
+services:
+  media-bot:
+    # Собираем образ из Dockerfile в текущей директории
+    build: .
+    # Имя контейнера для удобства
+    container_name: media-bot
+    # Подключаем файл с переменными окружения
+    env_file:
+      - .env
+    # Политика перезапуска: всегда перезапускать, если контейнер остановился не по команде
+    restart: unless-stopped
