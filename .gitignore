@@ -1,17 +1,34 @@
-# .gitignore
-
-# Игнорируем виртуальное окружение Python
-venv/
-env/
-
-# Игнорируем временные файлы Python
+# Python junk
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 
-# Игнорируем папки IDE
-.idea/
-
-# САМОЕ ВАЖНОЕ: Файл с секретами НИКОГДА не должен быть в репозитории
+# Environment variables (SECURITY RISK)
 .env
+.env.example
+
+# Logs
+*.log
+api_error_log.txt
+
+# Temp files
+telegram_data/
+temp/
